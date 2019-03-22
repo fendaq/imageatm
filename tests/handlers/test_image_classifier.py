@@ -19,11 +19,30 @@ TEST_CONFIG = {
     'loss': 'categorical_crossentropy',
 }
 
+TEST_BASE_MODULES = [
+    ('InceptionV3', 'keras.applications.inception_v3'),
+    ('InceptionResNetV2', 'keras.applications.inception_resnet_v2'),
+    ('NASNetLarge', 'keras.applications.nasnet'),
+    ('NASNetMobile', 'keras.applications.nasnet'),
+    ('DenseNet121', 'keras.applications.densenet'),
+    ('DenseNet169', 'keras.applications.densenet'),
+    ('DenseNet201', 'keras.applications.densenet'),
+    # ('ResNet50', 'keras.applications.resnet'),
+    # ('ResNet101', 'keras.applications.resnet'),
+    # ('ResNet152', 'keras.applications.resnet'),
+    # ('ResNet50V2', 'keras.applications.resnet_v2'),
+    # ('ResNet101V2', 'keras.applications.resnet_v2'),
+    # ('ResNet152V2', 'keras.applications.resnet_v2'),
+    # ('ResNeXt50', 'keras.applications.resnext'),
+    # ('ResNeXt101', 'keras.applications.resnext'),
+    ('MobileNet','keras.applications.mobilenet'),
+]
 
 @pytest.fixture(autouse=True)
 def common_patches(mocker):
     mocker.patch('keras.models.Model.compile')
     mocker.patch('keras.models.Model.fit_generator')
+    mocker.patch('keras.models.Model.predict_generator')
     mocker.patch('keras.models.Model.summary')
 
 
@@ -32,16 +51,18 @@ class TestImageClassifier(object):
 
     def test__init(self):
         global classifier
-        classifier = ImageClassifier(
-            TEST_CONFIG['base_model_name'],
-            TEST_CONFIG['n_classes'],
-            TEST_CONFIG['learning_rate_dense'],
-            TEST_CONFIG['dropout_rate'],
-            TEST_CONFIG['loss'],
-        )
 
-        assert classifier.weights == 'imagenet'
-        assert classifier.base_module is importlib.import_module('keras.applications.mobilenet')
+        for (base_model_name, base_module) in TEST_BASE_MODULES:
+            classifier = ImageClassifier(
+                base_model_name,
+                TEST_CONFIG['n_classes'],
+                TEST_CONFIG['learning_rate_dense'],
+                TEST_CONFIG['dropout_rate'],
+                TEST_CONFIG['loss'],
+            )
+
+            assert classifier.weights == 'imagenet'
+            assert classifier.base_module is importlib.import_module(base_module)
 
     def test__build(self):
         global classifier
@@ -101,3 +122,20 @@ class TestImageClassifier(object):
             verbose=1,
             workers=8,
         )
+
+    def test_predict_generator(self):
+        global classifier
+        classifier.predict_generator(
+            data_generator='validation_generator',
+            workers=TEST_CONFIG['num_workers_data_load'],
+            use_multiprocessing=TEST_CONFIG['multiprocessing_data_load'],
+            verbose=0,
+        )
+
+        Model.predict_generator.assert_called_once_with(
+            'validation_generator',
+            workers=8,
+            use_multiprocessing=True,
+            verbose=0,
+        )
+
